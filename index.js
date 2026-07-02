@@ -3,15 +3,8 @@ const { Telegraf, Markup } = require('telegraf');
 const CloudflareManager = require('./services/CloudflareManager');
 const { readConfig, writeConfig, readCustomSubdomains, writeCustomSubdomains } = require('./utils/fileUtils');
 
-const bot = new Telegraf(process.env.BOT_TOKEN, {
-    telegram: {
-        apiRoot: 'http://localhost:8081',
-        agent: null,
-        webhookReply: false,
-        timeout: 30000,
-        retryAfter: 1
-    }
-});
+const bot = new Telegraf(process.env.BOT_TOKEN);
+
 
 const sessions = new Map();
 
@@ -239,6 +232,39 @@ bot.action(/^setupzone_(.+)$/, async (ctx) => {
         return ctx.reply('⚠️ Sesi kadaluwarsa. Silakan klik menu Setup Wildcard kembali.');
     }
 });
+
+bot.action('setup_wildcard_btn', async (ctx) => {
+    if (ctx.callbackQuery) ctx.answerCbQuery().catch(() => {});
+    const userId = String(ctx.from.id);
+    const session = sessions.get(userId);
+    
+    if (session && session.state === 'SETUP_POINTING_DONE') {
+        const { zoneName, backendDomain, ipAddress, botMessageId } = session;
+        
+        sessions.set(userId, { 
+            state: 'SETUP_AWAITING_WILDCARD_PREFIX', 
+            zoneName: zoneName, 
+            backendDomain: backendDomain, 
+            ipAddress: ipAddress, 
+            botMessageId: botMessageId 
+        });
+        
+        const prompt = `📍 <b>Domain Backend:</b> <code>${backendDomain}</code> ➔ <code>${ipAddress}</code>\n\n` +
+                       `<b>Langkah Selanjutnya: Setup Wildcard</b>\n` +
+                       `Silakan masukkan subdomain (contoh: <code>bug.subdomain.com</code>):`;
+        
+        const backKeyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]]);
+        if (botMessageId) {
+            return ctx.telegram.editMessageText(ctx.chat.id, botMessageId, null, prompt, { parse_mode: 'HTML', ...backKeyboard }).catch(async () => {
+                return ctx.reply(prompt, { parse_mode: 'HTML', ...backKeyboard });
+            });
+        }
+        return ctx.reply(prompt, { parse_mode: 'HTML', ...backKeyboard });
+    } else {
+        return ctx.reply('⚠️ Sesi kadaluwarsa atau tidak valid. Silakan ulangi setup.');
+    }
+});
+
 
 bot.action('menu_deletecf', async (ctx) => {
     if (ctx.callbackQuery) ctx.answerCbQuery().catch(() => {});
@@ -505,7 +531,7 @@ async function handleSessionInput(ctx, session) {
                 }
                 
                 sessions.set(userId, { 
-                    state: 'SETUP_AWAITING_WILDCARD_PREFIX', 
+                    state: 'SETUP_POINTING_DONE', 
                     zoneName: zoneName, 
                     backendDomain: backendDomain, 
                     ipAddress: ipAddress, 
@@ -514,12 +540,14 @@ async function handleSessionInput(ctx, session) {
                 
                 let prompt = `${dnsStatusText}`;
                 prompt += `📍 <b>Domain Backend:</b> <code>${backendDomain}</code> ➔ <code>${ipAddress}</code>\n\n`;
-                prompt += `<b>Langkah Selanjutnya: Setup Wildcard</b>\n`;
-                prompt += `Silakan masukkan subdomain (contoh: <code>bug.subdomain.com</code>):`;
+                prompt += `Silakan klik tombol di bawah untuk melanjutkan ke Setup Wildcard:`;
                 
-                const backKeyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]]);
-                return ctx.telegram.editMessageText(ctx.chat.id, targetMessageId, null, prompt, { parse_mode: 'HTML', ...backKeyboard }).catch(async () => {
-                    return ctx.reply(prompt, { parse_mode: 'HTML', ...backKeyboard });
+                const nextKeyboard = Markup.inlineKeyboard([
+                    [Markup.button.callback('☁️ Setup Wildcard Sekarang', 'setup_wildcard_btn')],
+                    [Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]
+                ]);
+                return ctx.telegram.editMessageText(ctx.chat.id, targetMessageId, null, prompt, { parse_mode: 'HTML', ...nextKeyboard }).catch(async () => {
+                    return ctx.reply(prompt, { parse_mode: 'HTML', ...nextKeyboard });
                 });
             } catch (err) {
                 sessions.delete(userId);

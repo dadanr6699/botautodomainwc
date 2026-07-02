@@ -4,7 +4,9 @@ Bot Telegram premium untuk mengelola pendaftaran DNS A Record dan setup Wildcard
 
 ## Fitur Utama
 
+- **Dua Metode Setup:** Pilih `Setup DNS & Wildcard` untuk alur lengkap lama, atau `Tambah Wildcard Saja` untuk hanya mendaftarkan custom hostname wildcard tanpa pointing DNS.
 - **Penyatuan Alur DNS & Wildcard:** Melakukan pointing IP (A Record) dan dilanjutkan secara interaktif ke pendaftaran wildcard/custom hostname dalam 1 alur tombol.
+- **Tambah Wildcard Tanpa Pointing:** Mendukung input `@`, `bug`, atau `*.bug.domain.com` untuk mendaftarkan wildcard custom hostname tanpa membuat DNS A record, tanpa upload Worker, dan tanpa bind domain ke Worker.
 - **Deteksi & Pembersihan Konflik DNS Otomatis:** Secara otomatis menghapus record DNS CNAME/A yang bentrok (mengatasi Cloudflare error `100117`) sebelum menghubungkan domain ke Worker.
 - **Proxy Script Worker Dinamis:** Otomatis men-deploy script reverse proxy dinamis yang mengarah ke subdomain backend Anda tanpa memerlukan upload kode manual.
 - **Isolasi Pengguna Penuh:** Mendukung banyak pengguna dengan sesi dan penyimpanan kredensial API Key Cloudflare yang terisolasi secara terpisah untuk tiap user ID Telegram.
