@@ -67,7 +67,8 @@ function getKeyboard(userId) {
     
     return Markup.inlineKeyboard([
         [
-            Markup.button.callback('☁️ Setup DNS & Wildcard', 'menu_setup_wildcard')
+            Markup.button.callback('☁️ Setup DNS & Wildcard', 'menu_setup_wildcard'),
+            Markup.button.callback('🎯 Setup Wildcard Saja', 'menu_setup_wildcard_only')
         ],
         [
             Markup.button.callback('🔑 Update API Key', 'menu_addcf'),
@@ -206,6 +207,72 @@ bot.action('menu_setup_wildcard', async (ctx) => {
         });
     }
 });
+bot.action('menu_setup_wildcard_only', async (ctx) => {
+    if (ctx.callbackQuery) ctx.answerCbQuery().catch(() => {});
+    const userId = String(ctx.from.id);
+    
+    try {
+        const cf = new CloudflareManager(userId);
+        const zones = await cf.getZones();
+        
+        const backKeyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]]);
+        
+        if (zones.length === 0) {
+            return ctx.editMessageText('⚠️ Tidak ditemukan domain di akun Cloudflare Anda. Silakan hubungkan domain terlebih dahulu.', {
+                parse_mode: 'HTML',
+                ...backKeyboard
+            });
+        }
+        
+        // Sort zones from shortest to longest name
+        zones.sort((a, b) => a.name.length - b.name.length);
+        
+        sessions.set(userId, { state: 'SETUP_ONLY_CHOOSE_ZONE', zones: zones });
+        
+        const zoneButtons = zones.map((zone, idx) => Markup.button.callback(zone.name, `setuponlyzone_${idx}`));
+        const buttons = chunkArray(zoneButtons, 2);
+        buttons.push([Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]);
+        
+        return ctx.editMessageText('☁️ <b>PILIH DOMAIN UTAMA (WILDCARD SAJA)</b>\n\nSilakan pilih domain utama yang akan digunakan untuk setup wildcard saja:', {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard(buttons)
+        });
+    } catch (err) {
+        console.error(err);
+        return ctx.editMessageText(`❌ Gagal mengambil domain: ${err.message}`, {
+            parse_mode: 'HTML',
+            ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]])
+        });
+    }
+});
+
+bot.action(/^setuponlyzone_(.+)$/, async (ctx) => {
+    if (ctx.callbackQuery) ctx.answerCbQuery().catch(() => {});
+    const userId = String(ctx.from.id);
+    const param = ctx.match[1];
+    const session = sessions.get(userId);
+    
+    const index = parseInt(param, 10);
+    if (session && session.state === 'SETUP_ONLY_CHOOSE_ZONE' && session.zones && session.zones[index]) {
+        const zone = session.zones[index];
+        
+        let msg = `☁️ Domain Terpilih: <b>${zone.name}</b>\n\n`;
+        msg += `Silakan masukkan domain backend Anda yang sudah ada (contoh: <code>vps.domain.com</code>):`;
+        
+        const backKeyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]]);
+        const sentMsg = await ctx.editMessageText(msg, { parse_mode: 'HTML', ...backKeyboard });
+        sessions.set(userId, { 
+            state: 'SETUP_ONLY_AWAITING_BACKEND_NAME', 
+            zoneName: zone.name, 
+            botMessageId: sentMsg.message_id 
+        });
+        return;
+    } else {
+        return ctx.reply('⚠️ Sesi kadaluwarsa. Silakan klik menu Setup Wildcard Saja kembali.');
+    }
+});
+
+
 
 bot.action(/^setupzone_(.+)$/, async (ctx) => {
     if (ctx.callbackQuery) ctx.answerCbQuery().catch(() => {});
@@ -462,6 +529,124 @@ async function handleSessionInput(ctx, session) {
             return ctx.telegram.editMessageText(ctx.chat.id, targetMessageId, null, `✅ <b>REGISTRASI BERHASIL!</b>\n\n📧 <b>Email:</b> <code>${email}</code>\n🏢 <b>Account:</b> <code>${accountName}</code>`, { parse_mode: 'HTML', ...backKeyboard });
         }
         
+
+
+        if (session.state === 'SETUP_ONLY_AWAITING_BACKEND_NAME') {
+            const backendDomain = ctx.message.text.trim().toLowerCase().replace(/\.+$/, '');
+            const zoneName = session.zoneName;
+            
+            // Delete user input message
+            ctx.deleteMessage().catch(() => {});
+            
+            sessions.set(userId, { 
+                state: 'SETUP_ONLY_AWAITING_WILDCARD_PREFIX', 
+                zoneName: zoneName, 
+                backendDomain: backendDomain, 
+                botMessageId: botMessageId 
+            });
+            
+            const prompt = `📍 <b>Domain Backend Existing:</b> <code>${backendDomain}</code>\n\n` +
+                           `Silakan masukkan subdomain wildcard yang diinginkan (contoh: <code>bug.domain.com</code> atau <code>*.bug.domain.com</code>):`;
+            
+            const backKeyboard = Markup.inlineKeyboard([[Markup.button.callback('⬅️ Kembali ke Menu', 'menu_dashboard')]]);
+            if (botMessageId) {
+                return ctx.telegram.editMessageText(ctx.chat.id, botMessageId, null, prompt, { parse_mode: 'HTML', ...backKeyboard });
+            }
+            return ctx.reply(prompt, { parse_mode: 'HTML', ...backKeyboard });
+        }
+        if (session.state === 'SETUP_ONLY_AWAITING_WILDCARD_PREFIX') {
+            const prefix = ctx.message.text.trim().toLowerCase().replace(/\.+$/, '');
+            const zoneName = session.zoneName;
+            const backendDomain = session.backendDomain;
+            
+            // Delete user input message
+            ctx.deleteMessage().catch(() => {});
+            sessions.delete(userId);
+            
+            let finalDomain = backendDomain;
+            if (prefix !== '@') {
+                if (prefix === '*') {
+                    finalDomain = `*.${backendDomain}`;
+                } else if (prefix.endsWith(zoneName)) {
+                    finalDomain = prefix;
+                } else {
+                    finalDomain = `${prefix}.${zoneName}`;
+                }
+            }
+            
+            // Generate clean worker name based on the final domain
+            const workerName = finalDomain.replace(/\*/g, 'wildcard').replace(/\./g, '-').replace(/[^a-z0-9-]/g, '').toLowerCase();
+            
+            let status;
+            const loadingText = `⏳ Memproses setup wildcard saja...\n\n1. Mendaftarkan domain wildcard <code>${finalDomain}</code>\n2. Menyambungkan ke system proxy...`;
+            if (botMessageId) {
+                status = await ctx.telegram.editMessageText(ctx.chat.id, botMessageId, null, loadingText, { parse_mode: 'HTML' }).catch(async () => {
+                    return ctx.reply(loadingText, { parse_mode: 'HTML' });
+                });
+            } else {
+                status = await ctx.reply(loadingText, { parse_mode: 'HTML' });
+            }
+            const targetMessageId = status ? status.message_id : botMessageId;
+            
+            try {
+                const cf = new CloudflareManager(userId);
+                
+                // 1. Check and delete conflicting A/CNAME records for finalDomain to avoid error 100117
+                try {
+                    const zoneId = await cf.getZoneId(finalDomain);
+                    const dnsUrl = `${cf.baseUrl}/zones/${zoneId}/dns_records?name=${finalDomain}`;
+                    const dnsRes = await fetch(dnsUrl, { headers: cf.headers });
+                    const dnsData = await dnsRes.json();
+                    if (dnsData.success && dnsData.result && dnsData.result.length > 0) {
+                        for (const record of dnsData.result) {
+                            if (record.type === 'A' || record.type === 'CNAME') {
+                                const delUrl = `${cf.baseUrl}/zones/${zoneId}/dns_records/${record.id}`;
+                                await fetch(delUrl, { method: 'DELETE', headers: cf.headers });
+                            }
+                        }
+                    }
+                } catch (cleanupErr) {
+                    console.error('Conflicting DNS cleanup failed:', cleanupErr);
+                }
+                
+                // 2. Automatic Worker Code (dynamically proxies to the backendDomain)
+                const codeText = `export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    url.hostname = "${backendDomain}";
+    const modifiedRequest = new Request(url.toString(), request);
+    return fetch(modifiedRequest);
+  }
+};`;
+                
+                // 3. Upload Worker Script
+                await cf.uploadWorker(workerName, codeText);
+                
+                // 4. Bind Custom Domain to the Worker
+                await cf.bindCustomDomain(workerName, finalDomain);
+                
+                // 5. Save to custom_subdomains database
+                const subdomains = readCustomSubdomains();
+                if (!subdomains[userId]) {
+                    subdomains[userId] = [];
+                }
+                if (!subdomains[userId].includes(finalDomain)) {
+                    subdomains[userId].push(finalDomain);
+                    writeCustomSubdomains(subdomains);
+                }
+                
+                let responseText = `✅ <b>SETUP WILDCARD SAJA BERHASIL!</b>\n\n`;
+                responseText += `📍 <b>Domain Backend:</b> <code>${backendDomain}</code>\n`;
+                responseText += `🌐 <b>Domain Wildcard:</b> <code>${finalDomain}</code>\n\n`;
+                responseText += `⏳ <b>Penting:</b> Silakan tunggu sekitar 3 sampai 5 menit agar domain aktif.\n\n`;
+                
+                return ctx.telegram.editMessageText(ctx.chat.id, targetMessageId, null, responseText, { parse_mode: 'HTML', ...backKeyboard });
+            } catch (err) {
+                return ctx.telegram.editMessageText(ctx.chat.id, targetMessageId, null, `❌ <b>Gagal melakukan setup wildcard saja:</b> ${escapeHtml(err.message)}`, { parse_mode: 'HTML', ...backKeyboard });
+            }
+        }
+
+
 
 
         if (session.state === 'SETUP_AWAITING_BACKEND_NAME') {
