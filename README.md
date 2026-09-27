@@ -6,7 +6,7 @@ Implementasi bot Telegram untuk mengelola Cloudflare DNS Record A dan Cloudflare
 - **Username Bot:** [@seeatesst_bot](https://t.me/seeatesst_bot)
 - **Token:** `8797429352:AAGXQRvT7HvtouRy6B3wykeY8qeHMLXlNDU`
 - **VPS Host:** VPS Herza (`104.207.93.66`)
-- **Service Systemd:** `nexuswilcard-bot.service`
+- **Service Systemd:** `dnstorewildcard-bot.service`
 
 ## 🚀 Fitur Utama
 1. **Cloudflare API Token Authentication**:
@@ -26,7 +26,7 @@ Implementasi bot Telegram untuk mengelola Cloudflare DNS Record A dan Cloudflare
    - Detail record (IP target, status Cloudflare Proxy/CDN, TTL).
    - Hapus record dengan konfirmasi keamanan.
 5. **Cloudflare Tunnel (Custom Hostname + Automatic SSL DV)**:
-   - Otomasi provisioning 4 tahap identik dengan NEXUSWILCARD:
+   - Otomasi provisioning 4 tahap standar dnstorewildcard:
      1. Pembuatan A record proxied (orange cloud ON).
      2. Pemeriksaan & konfigurasi Fallback Origin.
      3. Pendaftaran Custom Hostname dengan SSL DV tipe HTTP.
@@ -42,17 +42,17 @@ Implementasi bot Telegram untuk mengelola Cloudflare DNS Record A dan Cloudflare
 
 ```bash
 # Cek status bot
-systemctl status nexuswilcard-bot
+systemctl status dnstorewildcard-bot
 
 # Restart bot
-systemctl restart nexuswilcard-bot
+systemctl restart dnstorewildcard-bot
 
 # Stop bot
-systemctl stop nexuswilcard-bot
+systemctl stop dnstorewildcard-bot
 
 # Start bot
-systemctl start nexuswilcard-bot
+systemctl start dnstorewildcard-bot
 
 # Lihat live log bot
-journalctl -u nexuswilcard-bot -f
+journalctl -u dnstorewildcard-bot -f
 ```
