@@ -26,19 +26,20 @@ function formatProvisioningText(host, ip, stepState) {
     return '⚪';
   };
 
-  const lines = [
+  const sections = [
     '⚡ <b>PROSES PROVISIONING TUNNEL</b>',
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `🌐 <b>Hostname :</b> <code>${host}</code>`,
-    `📍 <b>Target IP:</b> <code>${ip}</code>`,
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `${getIcon(stepState[1].status)} <b>Langkah 1/3:</b> ${stepState[1].text}`,
-    `${getIcon(stepState[2].status)} <b>Langkah 2/3:</b> ${stepState[2].text}`,
-    `${getIcon(stepState[3].status)} <b>Langkah 3/3:</b> ${stepState[3].text}`,
-    '━━━━━━━━━━━━━━━━━━━━━━',
+    [
+      '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(host) + '</code>',
+      '📍 <b>Target IP:</b> <code>' + utils.escapeHtml(ip) + '</code></blockquote>'
+    ].join('\n'),
+    [
+      '<blockquote>' + `${getIcon(stepState[1].status)} <b>Langkah 1/3:</b> ${stepState[1].text}`,
+      `${getIcon(stepState[2].status)} <b>Langkah 2/3:</b> ${stepState[2].text}`,
+      `${getIcon(stepState[3].status)} <b>Langkah 3/3:</b> ${stepState[3].text}</blockquote>`
+    ].join('\n'),
     '⏳ <i>Sedang sinkronisasi ke Cloudflare Edge...</i>'
   ];
-  return lines.join('\n');
+  return sections.join('\n\n');
 }
 
 function formatTunnelSuccessText({
@@ -62,41 +63,47 @@ function formatTunnelSuccessText({
   let monitorSection = '';
   if (isSslActive) {
     monitorSection = [
-      '✨ <b>Sertifikat SSL DV telah AKTIF penuh!</b>',
-      '🔒 Koneksi HTTPS & WAF telah siap digunakan untuk tunnel ini.'
+      '<blockquote>✨ <b>Sertifikat SSL DV telah AKTIF penuh!</b>',
+      '🔒 Koneksi HTTPS & WAF telah siap digunakan untuk tunnel ini.</blockquote>'
     ].join('\n');
   } else if (isLiveMonitoring) {
     monitorSection = [
-      '📡 <b>Pemantau SSL Realtime:</b>',
+      '<blockquote>📡 <b>Pemantau SSL Realtime:</b>',
       `<code>${spinner}</code> <i>Memeriksa status SSL secara otomatis...</i>`,
-      `⏱️ <i>Pengecekan ke-${pollCount} (${elapsedSec}s) — Tidak perlu tekan refresh.</i>`
+      `⏱️ <i>Pengecekan ke-${pollCount} (${elapsedSec}s) — Tidak perlu tekan refresh.</i></blockquote>`
     ].join('\n');
   } else {
     monitorSection = [
-      'ℹ️ <b>Sertifikat SSL DV dalam proses verifikasi CA.</b>',
-      '<i>Cloudflare biasanya butuh 5-15 menit untuk menerbitkan sertifikat. Bot akan memantau di latar belakang.</i>'
+      '<blockquote>ℹ️ <b>Sertifikat SSL DV dalam proses verifikasi CA.</b>',
+      '<i>Cloudflare biasanya butuh 5-15 menit untuk menerbitkan sertifikat. Bot akan memantau di latar belakang.</i></blockquote>'
     ].join('\n');
   }
 
-  const lines = [
+  const configList = [
+    '<blockquote>📋 <b>Konfigurasi Selesai:</b>',
+    `✅ DNS A Record ➔ <code>${ip}</code> (Proxied)`,
+    `✅ Fallback Origin ➔ <code>${host}</code>`,
+    `✅ Custom Hostname & SSL DV Terdaftar`
+  ];
+  if (txtCreated) {
+    configList.push('✅ DNS TXT Ownership Verification Terpasang');
+  }
+  configList[configList.length - 1] += '</blockquote>';
+
+  const sections = [
     header,
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `🌐 <b>Hostname     :</b> <code>${host}</code>`,
-    `📍 <b>Target IP    :</b> <code>${ip}</code>`,
-    `🔒 <b>Status SSL   :</b> ${badge}${isLiveMonitoring ? ' <i>(Live)</i>' : ''}`,
-    `🛡️ <b>CDN Proxy   :</b> <code>Proxied (CDN + WAF ON)</code>`,
-    `🆔 <b>Custom Host  :</b> <code>${chId}</code>`,
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    '📋 <b>Konfigurasi Selesai:</b>',
-    `  ✅ DNS A Record ➔ <code>${ip}</code> (Proxied)`,
-    `  ✅ Fallback Origin ➔ <code>${host}</code>`,
-    `  ✅ Custom Hostname & SSL DV Terdaftar`,
-    txtCreated ? `  ✅ DNS TXT Ownership Verification Terpasang\n` : '',
-    '━━━━━━━━━━━━━━━━━━━━━━',
+    [
+      '<blockquote>🌐 <b>Hostname:</b> <code>' + host + '</code>',
+      `📍 <b>Target IP:</b> <code>${ip}</code>`,
+      `🔒 <b>Status SSL:</b> ${badge}${isLiveMonitoring ? ' <i>(Live)</i>' : ''}`,
+      `🛡️ <b>CDN Proxy:</b> <code>Proxied (CDN + WAF ON)</code>`,
+      `🆔 <b>Custom Host:</b> <code>${chId}</code></blockquote>`
+    ].join('\n'),
+    configList.join('\n'),
     monitorSection
   ];
 
-  return lines.filter(Boolean).join('\n');
+  return sections.filter(Boolean).join('\n\n');
 }
 
 async function showTunnels(ctx, zoneId, lastRefreshed = null) {
@@ -106,13 +113,14 @@ async function showTunnels(ctx, zoneId, lastRefreshed = null) {
   const textLines = [
     '🌐 <b>Setting Wildcard Manager</b>',
     '<i>(Custom Hostname + Automatic SSL DV)</i>',
-    `Domain: <b>${utils.escapeHtml(user.selected_zone_name || zoneId)}</b>`,
-    '━━━━━━━━━━━━━━━━━━━━'
+    '',
+    `<blockquote>🌐 <b>Domain:</b> <b>${utils.escapeHtml(user.selected_zone_name || zoneId)}</b></blockquote>`,
+    ''
   ];
 
   if (tunnels.length === 0) {
     textLines.push('<i>Belum ada wildcard yang dibuat di domain ini.</i>');
-    textLines.push('Tekan <b>🚀 Buat Wildcard Baru</b> untuk memulai provisioning otomatis 4 tahap.');
+    textLines.push('Tekan <b>🚀 Buat Wildcard Baru</b> untuk memulai provisioning otomatis.');
   } else {
     textLines.push(`Tersimpan <b>${tunnels.length}</b> wildcard. Klik untuk detail / hapus:`);
   }
@@ -262,7 +270,12 @@ async function startRealtimeSslTracker({
       try {
         await telegram.sendMessage(
           chatId,
-          `🎉 <b>SSL DV Telah Aktif!</b>\nTunnel <code>${host}</code> sekarang 100% siap digunakan dengan HTTPS penuh.`,
+          [
+            '🎉 <b>SSL DV Telah Aktif!</b>',
+            '',
+            `<blockquote>🌐 <b>Hostname:</b> <code>${host}</code>`,
+            '🔒 <i>Sertifikat SSL DV telah aktif penuh. Tunnel siap digunakan untuk HTTPS!</i></blockquote>'
+          ].join('\n'),
           { parse_mode: 'HTML' }
         );
       } catch (e) {}
@@ -341,7 +354,13 @@ async function startBackgroundSslWatcher(telegram, chatId, user, zoneId, tunnelI
         if (res.status === 'active') {
           await telegram.sendMessage(
             chatId,
-            `🎉 <b>Notifikasi SSL Cloudflare:</b>\nSertifikat SSL DV untuk <code>${host}</code> sekarang telah <b>🟢 AKTIF</b>!\nKoneksi HTTPS aman siap dinikmati.`,
+            [
+              '🎉 <b>Notifikasi SSL Cloudflare</b>',
+              '',
+              `<blockquote>🌐 <b>Hostname:</b> <code>${host}</code>`,
+              '🔒 <b>Status SSL:</b> 🟢 <b>Aktif (SSL DV Ready)</b>',
+              '<i>Sertifikat SSL DV berhasil divalidasi dan koneksi HTTPS aman siap dinikmati.</i></blockquote>'
+            ].join('\n'),
             {
               parse_mode: 'HTML',
               ...Markup.inlineKeyboard([
@@ -464,12 +483,13 @@ async function handleTunnelIpInput(ctx, user, ipInput) {
   } else {
     const text = [
       '❌ <b>PROVISIONING TUNNEL GAGAL</b>',
-      '━━━━━━━━━━━━━━━━━━━━━━',
-      `🌐 <b>Hostname :</b> <code>${host}</code>`,
-      `📍 <b>Target IP:</b> <code>${cleanIp}</code>`,
-      '━━━━━━━━━━━━━━━━━━━━━━',
-      `⚠️ <b>Penyebab :</b> <code>${utils.escapeHtml(result.error)}</code>`,
-      '━━━━━━━━━━━━━━━━━━━━━━',
+      '',
+      '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(host) + '</code>',
+      `📍 <b>Target IP:</b> <code>${utils.escapeHtml(cleanIp)}</code></blockquote>`,
+      '',
+      '<blockquote>⚠️ <b>Penyebab:</b>',
+      `<code>${utils.escapeHtml(result.error)}</code></blockquote>`,
+      '',
       '<i>Silakan periksa konfigurasi domain atau coba beberapa saat lagi.</i>'
     ].join('\n');
 
@@ -549,14 +569,13 @@ async function showTunnelDetail(ctx, tunnelId) {
   const createdDate = new Date(tunnel.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB';
   const text = [
     '🌐 <b>DETAIL CLOUDFLARE TUNNEL</b>',
-    '━━━━━━━━━━━━━━━━━━━━━━',
-    `🌐 <b>Hostname   :</b> <code>${tunnel.host}</code>`,
-    `📍 <b>Target IP  :</b> <code>${tunnel.ip}</code>`,
-    `🔒 <b>Status SSL :</b> ${sslBadge(currentSsl)}`,
-    `🛡️ <b>CDN Proxy :</b> <code>Proxied (Orange Cloud ON)</code>`,
-    `🆔 <b>Custom Host:</b> <code>${tunnel.ch_id}</code>`,
-    `📅 <b>Dibuat     :</b> <code>${createdDate}</code>`,
-    '━━━━━━━━━━━━━━━━━━━━━━'
+    '',
+    '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(tunnel.host) + '</code>',
+    `📍 <b>Target IP:</b> <code>${utils.escapeHtml(tunnel.ip)}</code>`,
+    `🔒 <b>Status SSL:</b> ${sslBadge(currentSsl)}`,
+    `🛡️ <b>CDN Proxy:</b> <code>Proxied (Orange Cloud ON)</code>`,
+    `🆔 <b>Custom Host:</b> <code>${utils.escapeHtml(tunnel.ch_id)}</code>`,
+    `📅 <b>Dibuat:</b> <code>${createdDate}</code></blockquote>`
   ].join('\n');
 
   const kb = Markup.inlineKeyboard([

@@ -78,9 +78,8 @@ bot.command(['key', 'login'], async (ctx) => {
   db.setUserState(ctx.from.id, 'awaiting_email');
   const text = [
     '📧 <b>Langkah 1/2: Masukkan Email Cloudflare</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    'Silakan ketik atau kirimkan email akun Cloudflare Anda.',
-    '<i>Contoh: <code>kamu@gmail.com</code></i>',
+    '',
+    '<blockquote>Silakan ketik atau kirimkan email akun Cloudflare Anda.\n<i>Contoh: <code>kamu@gmail.com</code></i></blockquote>',
     '',
     '<i>Atau gunakan langsung:</i>',
     '<code>/key &lt;email&gt; &lt;global_api_key&gt;</code>',
@@ -163,17 +162,16 @@ bot.command('tutorial', async (ctx) => {
 bot.command('help', async (ctx) => {
   const text = [
     '⚡ <b>Daftar Perintah DnstoreWildcard Bot</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    '• /start atau /menu — Buka dashboard utama',
-    '• /key [email] [api_key] — Login dengan Global API Key Cloudflare',
-    '• /domains — Pilih domain / zone yang aktif',
-    '• /records — Lihat daftar DNS A records domain aktif',
+    '',
+    '<blockquote>• /start atau /menu — Buka dashboard utama',
+    '• /key [email] [api_key] — Login Global API Key',
+    '• /domains — Pilih domain / zone aktif',
+    '• /records — Lihat daftar DNS A records',
     '• /tunnels — Kelola Setting Wildcard & SSL',
     '• /ip — Cek IP publik VPS (Herza)',
-    '• /tutorial — Panduan cara mengambil Global API Key',
+    '• /tutorial — Panduan ambil Global API Key',
     '• /logout — Hapus data Cloudflare dari bot',
-    '• /cancel — Batalkan input saat ini',
-    '━━━━━━━━━━━━━━━━━━━━'
+    '• /cancel — Batalkan input saat ini</blockquote>'
   ].join('\n');
   return ctx.reply(text, { parse_mode: 'HTML' });
 });
@@ -191,9 +189,8 @@ bot.action('action_login', async (ctx) => {
   db.setUserState(ctx.from.id, 'awaiting_email');
   const text = [
     '📧 <b>Langkah 1/2: Masukkan Email Cloudflare</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    'Silakan ketik atau kirimkan email akun Cloudflare Anda.',
-    '<i>Contoh: <code>kamu@gmail.com</code></i>',
+    '',
+    '<blockquote>Silakan ketik atau kirimkan email akun Cloudflare Anda.\n<i>Contoh: <code>kamu@gmail.com</code></i></blockquote>',
     '',
     '<i>Atau kirim langsung:</i>',
     '<code>/key &lt;email&gt; &lt;global_api_key&gt;</code>',
@@ -207,9 +204,8 @@ bot.action('prompt_logout', async (ctx) => {
   await ctx.answerCbQuery();
   const text = [
     '🚪 <b>Konfirmasi Keluar</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    'Apakah Anda yakin ingin menghapus akun Cloudflare dari bot ini?',
-    '<i>(Domain dan DNS record Anda di Cloudflare tidak akan terpengaruh).</i>'
+    '',
+    '<blockquote>Apakah Anda yakin ingin menghapus akun Cloudflare dari bot ini?\n<i>(Domain dan DNS record Anda di Cloudflare tidak akan terpengaruh).</i></blockquote>'
   ].join('\n');
   const kb = Markup.inlineKeyboard([
     [Markup.button.callback('🚪 Ya, Logout Akun', 'confirm_logout')],
@@ -281,8 +277,9 @@ bot.action(/^select_zone:(.+)$/, async (ctx) => {
 
   const text = [
     `🌐 <b>Domain Terpilih: ${utils.escapeHtml(zoneName)}</b>`,
-    `Zone ID: <code>${zoneId}</code>`,
-    '━━━━━━━━━━━━━━━━━━━━',
+    '',
+    `<blockquote>Zone ID: <code>${zoneId}</code></blockquote>`,
+    '',
     '<i>Pilih tindakan untuk domain ini:</i>'
   ].join('\n');
   return ctx.editMessageText(text, { parse_mode: 'HTML', ...keyboards.zoneDetailKeyboard(zoneId) });
@@ -422,14 +419,13 @@ bot.on('text', async (ctx) => {
       db.setUserState(ctx.from.id, 'awaiting_key', { email: text.toLowerCase() });
       const step2Text = [
         '🔑 <b>Langkah 2/2: Masukkan Global API Key</b>',
-        '━━━━━━━━━━━━━━━━━━━━',
-        `Email: <code>${utils.escapeHtml(text.toLowerCase())}</code>`,
         '',
-        'Sekarang kirimkan <b>Global API Key</b> Cloudflare Anda:',
-        '<i>(Dapat dilihat di dash.cloudflare.com ➔ My Profile ➔ API Keys ➔ Global API Key)</i>',
+        `<blockquote>Email: <code>${utils.escapeHtml(text.toLowerCase())}</code></blockquote>`,
+        '',
+        '<blockquote>Sekarang kirimkan <b>Global API Key</b> Cloudflare Anda:\n<i>(Dapat dilihat di dash.cloudflare.com ➔ My Profile ➔ API Keys ➔ Global API Key)</i></blockquote>',
         '',
         '<i>Kirim /cancel untuk batal.</i>'
-      ].join('\\n');
+      ].join('\n');
       return ctx.reply(step2Text, { parse_mode: 'HTML', ...keyboards.cancelKeyboard() });
     }
     case 'awaiting_key': {

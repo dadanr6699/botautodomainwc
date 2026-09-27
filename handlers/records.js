@@ -24,9 +24,10 @@ async function showRecords(ctx, zoneId, page = 0) {
 
   const textLines = [
     '📖 <b>Daftar DNS Record (Type A)</b>',
-    `Domain: <b>${utils.escapeHtml(user.selected_zone_name || zoneId)}</b>`,
-    `Total: <b>${records.length}</b> record(s) — Halaman <b>${page + 1}/${totalPages}</b>`,
-    '━━━━━━━━━━━━━━━━━━━━'
+    '',
+    `<blockquote>🌐 <b>Domain:</b> <b>${utils.escapeHtml(user.selected_zone_name || zoneId)}</b>`,
+    `📊 <b>Total:</b> <b>${records.length}</b> record(s) — Halaman <b>${page + 1}/${totalPages}</b></blockquote>`,
+    ''
   ];
 
   if (records.length === 0) {
@@ -88,13 +89,12 @@ async function showRecordDetail(ctx, recordId) {
   const proxiedText = r.proxied ? '🟠 Aktif (Proxied CDN)' : '⚪ Mati (DNS Only)';
   const text = [
     '📋 <b>Detail DNS Record A</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    `🌐 <b>Hostname:</b> <code>${r.name}</code>`,
+    '',
+    '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(r.name) + '</code>',
     `📍 <b>IP Target:</b> <code>${r.content}</code>`,
     `☁️ <b>Proxy:</b> ${proxiedText}`,
     `⏱️ <b>TTL:</b> ${r.ttl} detik`,
-    `🆔 <b>Record ID:</b> <code>${r.id}</code>`,
-    '━━━━━━━━━━━━━━━━━━━━'
+    `🆔 <b>Record ID:</b> <code>${r.id}</code></blockquote>`
   ].join('\n');
 
   const kb = Markup.inlineKeyboard([
@@ -116,9 +116,8 @@ async function confirmDeleteRecord(ctx, recordId) {
 
   const text = [
     '⚠️ <b>Konfirmasi Hapus Record</b>',
-    '━━━━━━━━━━━━━━━━━━━━',
-    `Apakah Anda yakin ingin menghapus record <code>${r.name || recordId}</code>?`,
-    '<i>Tindakan ini tidak dapat dibatalkan.</i>'
+    '',
+    `<blockquote>Apakah Anda yakin ingin menghapus record <code>${utils.escapeHtml(r.name || recordId)}</code>?\n<i>Tindakan ini tidak dapat dibatalkan.</i></blockquote>`
   ].join('\n');
 
   const kb = Markup.inlineKeyboard([
