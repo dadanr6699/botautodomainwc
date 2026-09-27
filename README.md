@@ -45,12 +45,13 @@ Antarmuka bot dirancang modern menggunakan format Telegram HTML `<blockquote>` y
 * **Detail Record Lengkap**: Informasi IP target, status Cloudflare Proxy (Orange/Grey Cloud), dan TTL.
 * **Penghapusan Aman**: Konfirmasi dialog sebelum menghapus record DNS untuk menghindari kesalahan operasional.
 
-### 🚀 5. Provisioning Wildcard Tunnel & SSL DV Otomatis
+### 🚀 5. Provisioning & Penghapusan Wildcard Tunnel (Custom Hostname)
 Mengotomatisasi 4 tahapan Cloudflare for SaaS / Tunneling dalam hitungan detik:
 1. **DNS A Record Proxied**: Pembuatan record A dengan status Cloudflare Proxy aktif (Orange Cloud).
 2. **Fallback Origin Setup**: Memeriksa dan mendaftarkan origin fallback pada zone terkait.
 3. **Custom Hostname Registration**: Mendaftarkan custom hostname dengan SSL tipe HTTP domain validation.
 4. **SSL Tracker Real-Time**: Pelacakan status penerbitan SSL (*pending_validation* ➜ *active*).
+5. **Penghapusan Aman & Terintegrasi**: Dialog konfirmasi hapus domain wildcard dengan opsi *Hapus Hostname Saja* atau *Hapus Hostname + DNS Record* & sinkronisasi otomatis Cloudflare API. Akses cepat via menu atau perintah `/deltunnel`.
 
 ### 🛠️ 6. Tools Pendukung
 * **Auto-Detect VPS IPv4**: Deteksi IP publik server VPS Herza secara instan via API `ifconfig.me`.

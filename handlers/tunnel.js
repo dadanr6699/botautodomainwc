@@ -106,9 +106,50 @@ function formatTunnelSuccessText({
   return sections.filter(Boolean).join('\n\n');
 }
 
+async function syncTunnelsWithCloudflare(user, zoneId) {
+  try {
+    const res = await cf.getCustomHostnames(user, zoneId);
+    if (res.success && Array.isArray(res.hostnames)) {
+      const localTunnels = db.getTunnels(user.user_id, zoneId);
+      const remoteIds = new Set();
+
+      for (const ch of res.hostnames) {
+        remoteIds.add(ch.id);
+        const sslStatus = (ch.ssl && ch.ssl.status) ? ch.ssl.status : 'unknown';
+        const existing = localTunnels.find(t => t.ch_id === ch.id || t.host === ch.hostname);
+
+        let ip = existing ? existing.ip : '';
+        if (!ip) {
+          const rec = await cf.findRecord(user, zoneId, ch.hostname, 'A');
+          if (rec.success && rec.record) {
+            ip = rec.record.content;
+          } else {
+            ip = 'Cloudflare Edge';
+          }
+        }
+
+        db.saveTunnel(user.user_id, zoneId, ch.hostname, ip, ch.id, sslStatus);
+      }
+
+      for (const lt of localTunnels) {
+        if (lt.ch_id && !remoteIds.has(lt.ch_id)) {
+          db.deleteTunnel(lt.id);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('syncTunnelsWithCloudflare error:', err);
+  }
+}
+
 async function showTunnels(ctx, zoneId, lastRefreshed = null) {
   const user = db.getUser(ctx.from.id);
-  const tunnels = db.getTunnels(ctx.from.id, zoneId);
+  let tunnels = db.getTunnels(ctx.from.id, zoneId);
+
+  if (tunnels.length === 0 && (user.cf_token || user.cf_api_key)) {
+    await syncTunnelsWithCloudflare(user, zoneId);
+    tunnels = db.getTunnels(ctx.from.id, zoneId);
+  }
 
   const textLines = [
     '🌐 <b>Setting Wildcard Manager</b>',
@@ -137,11 +178,16 @@ async function showTunnels(ctx, zoneId, lastRefreshed = null) {
     ]);
   }
 
+  const actionRow = [
+    Markup.button.callback('🚀 Buat Wildcard Baru', `tunnel_new:${zoneId}`)
+  ];
+  if (tunnels.length > 0) {
+    actionRow.push(Markup.button.callback('🗑️ Hapus Wildcard', `dom_del_tunnel:${zoneId}`));
+  }
+  buttons.push(actionRow);
+
   buttons.push([
-    Markup.button.callback('🚀 Buat Wildcard Baru', `tunnel_new:${zoneId}`),
-    Markup.button.callback('🔄 Refresh Status SSL', `tunnel_refresh:${zoneId}`)
-  ]);
-  buttons.push([
+    Markup.button.callback('🔄 Refresh Status SSL', `tunnel_refresh:${zoneId}`),
     Markup.button.callback('↩️ Menu Domain', `select_zone:${zoneId}`)
   ]);
 
@@ -504,6 +550,7 @@ async function handleTunnelIpInput(ctx, user, ipInput) {
 
 async function refreshTunnelSsl(ctx, zoneId) {
   const user = db.getUser(ctx.from.id);
+  await syncTunnelsWithCloudflare(user, zoneId);
   const tunnels = db.getTunnels(ctx.from.id, zoneId);
 
   if (tunnels.length === 0) {
@@ -571,40 +618,160 @@ async function showTunnelDetail(ctx, tunnelId) {
     '🌐 <b>DETAIL CLOUDFLARE TUNNEL</b>',
     '',
     '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(tunnel.host) + '</code>',
-    `📍 <b>Target IP:</b> <code>${utils.escapeHtml(tunnel.ip)}</code>`,
+    `📍 <b>Target IP:</b> <code>${utils.escapeHtml(tunnel.ip || '-')}</code>`,
     `🔒 <b>Status SSL:</b> ${sslBadge(currentSsl)}`,
     `🛡️ <b>CDN Proxy:</b> <code>Proxied (Orange Cloud ON)</code>`,
-    `🆔 <b>Custom Host:</b> <code>${utils.escapeHtml(tunnel.ch_id)}</code>`,
+    `🆔 <b>Custom Host:</b> <code>${utils.escapeHtml(tunnel.ch_id || '-')}</code>`,
     `📅 <b>Dibuat:</b> <code>${createdDate}</code></blockquote>`
   ].join('\n');
 
   const kb = Markup.inlineKeyboard([
     [Markup.button.callback('🔍 Cek Ulang SSL Realtime', `tunnel_check:${tunnel.id}`)],
-    [Markup.button.callback('🗑️ Hapus Hostname Saja', `tunnel_del_ch:${tunnel.id}`)],
-    [Markup.button.callback('💥 Hapus Hostname + DNS Record', `tunnel_del_both:${tunnel.id}`)],
+    [Markup.button.callback('🗑️ Hapus Wildcard Ini', `tunnel_confirm_del:${tunnel.id}`)],
     [Markup.button.callback('↩️ Kembali ke Setting Wildcard', `dom_tunnels:${tunnel.zone_id}`)]
   ]);
 
   return utils.safeEdit(ctx, text, { parse_mode: 'HTML', ...kb });
 }
 
-async function deleteTunnelAction(ctx, tunnelId, withDns = false) {
+async function showDeleteTunnelList(ctx, zoneId) {
+  const user = db.getUser(ctx.from.id);
+  if (!user || (!user.cf_token && !user.cf_api_key)) {
+    return ctx.answerCbQuery('Silakan login terlebih dahulu!', { show_alert: true });
+  }
+
+  await syncTunnelsWithCloudflare(user, zoneId);
+  const tunnels = db.getTunnels(ctx.from.id, zoneId);
+  const zoneName = user.selected_zone_name || zoneId;
+
+  if (tunnels.length === 0) {
+    const text = [
+      '🗑️ <b>Hapus Domain Wildcard</b>',
+      '',
+      `<blockquote>🌐 <b>Domain:</b> <b>${utils.escapeHtml(zoneName)}</b>\n<i>Tidak ada domain wildcard yang ditemukan pada domain ini.</i></blockquote>`,
+      '',
+      '<i>Silakan buat domain wildcard baru jika ingin mengonfigurasi.</i>'
+    ].join('\n');
+
+    const kb = Markup.inlineKeyboard([
+      [Markup.button.callback('🚀 Buat Wildcard Baru', `tunnel_new:${zoneId}`)],
+      [Markup.button.callback('↩️ Kembali ke Setting Wildcard', `dom_tunnels:${zoneId}`)]
+    ]);
+
+    if (ctx.callbackQuery) {
+      return utils.safeEdit(ctx, text, { parse_mode: 'HTML', ...kb });
+    }
+    return ctx.reply(text, { parse_mode: 'HTML', ...kb });
+  }
+
+  const text = [
+    '🗑️ <b>Pilih Domain Wildcard untuk Dihapus</b>',
+    '',
+    `<blockquote>🌐 <b>Domain:</b> <b>${utils.escapeHtml(zoneName)}</b>\n<i>Pilih domain wildcard di bawah yang ingin Anda hapus:</i></blockquote>`
+  ].join('\n');
+
+  const buttons = [];
+  for (const t of tunnels) {
+    buttons.push([
+      Markup.button.callback(`🗑️ ${t.host}`, `tunnel_confirm_del:${t.id}`)
+    ]);
+  }
+
+  buttons.push([
+    Markup.button.callback('↩️ Kembali ke Setting Wildcard', `dom_tunnels:${zoneId}`)
+  ]);
+
+  const kb = Markup.inlineKeyboard(buttons);
+  if (ctx.callbackQuery) {
+    return utils.safeEdit(ctx, text, { parse_mode: 'HTML', ...kb });
+  }
+  return ctx.reply(text, { parse_mode: 'HTML', ...kb });
+}
+
+async function confirmDeleteTunnel(ctx, tunnelId) {
   const user = db.getUser(ctx.from.id);
   const tunnel = db.getTunnelById(tunnelId);
 
   if (!tunnel) {
-    return ctx.answerCbQuery('Tunnel tidak ditemukan!', { show_alert: true });
+    return ctx.answerCbQuery('Domain wildcard tidak ditemukan atau sudah dihapus!', { show_alert: true });
   }
 
-  await ctx.answerCbQuery('⏳ Menghapus tunnel...', { show_alert: false });
-  await cf.deleteTunnelFull(user, tunnel.zone_id, tunnel.ch_id, tunnel.host, withDns);
+  const createdDate = new Date(tunnel.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB';
+  const text = [
+    '⚠️ <b>Konfirmasi Hapus Domain Wildcard</b>',
+    '',
+    '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(tunnel.host) + '</code>',
+    `📍 <b>Target IP:</b> <code>${utils.escapeHtml(tunnel.ip || '-')}</code>`,
+    `🔒 <b>Status SSL:</b> ${sslBadge(tunnel.ssl_status)}`,
+    `🆔 <b>Custom Host:</b> <code>${utils.escapeHtml(tunnel.ch_id || '-')}</code>`,
+    `📅 <b>Dibuat:</b> <code>${createdDate}</code></blockquote>`,
+    '',
+    '<blockquote>⚠️ <b>Peringatan:</b>\n<i>Menghapus custom hostname akan memutus routing wildcard Cloudflare untuk hostname ini.</i></blockquote>',
+    '',
+    '<i>Silakan pilih metode penghapusan di bawah:</i>'
+  ].join('\n');
+
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('🗑️ Hapus Hostname Saja', `tunnel_dodel_ch:${tunnel.id}`)],
+    [Markup.button.callback('💥 Hapus Hostname + DNS Record', `tunnel_dodel_both:${tunnel.id}`)],
+    [Markup.button.callback('❌ Batalkan', `tunnel_view:${tunnel.id}`)]
+  ]);
+
+  return utils.safeEdit(ctx, text, { parse_mode: 'HTML', ...kb });
+}
+
+async function executeDeleteTunnel(ctx, tunnelId, withDns = false) {
+  const user = db.getUser(ctx.from.id);
+  const tunnel = db.getTunnelById(tunnelId);
+
+  if (!tunnel) {
+    return ctx.answerCbQuery('Domain wildcard tidak ditemukan atau sudah dihapus!', { show_alert: true });
+  }
+
+  try {
+    await ctx.answerCbQuery('⏳ Menghapus wildcard dari Cloudflare...', { show_alert: false });
+  } catch (e) {}
+
+  const delRes = await cf.deleteTunnelFull(user, tunnel.zone_id, tunnel.ch_id, tunnel.host, withDns);
   db.deleteTunnel(tunnel.id);
 
-  return showTunnels(ctx, tunnel.zone_id);
+  const chStatusText = delRes.chDeleted
+    ? '✅ Berhasil dihapus dari Cloudflare'
+    : '⚠️ Telah dibersihkan dari database';
+
+  const dnsStatusText = withDns
+    ? (delRes.dnsDeleted ? '✅ Berhasil dihapus dari Cloudflare' : '⚠️ Tidak ditemukan / telah dihapus')
+    : 'ℹ️ Dipertahankan (DNS Only)';
+
+  const text = [
+    '✅ <b>Domain Wildcard Berhasil Dihapus!</b>',
+    '',
+    '<blockquote>🌐 <b>Hostname:</b> <code>' + utils.escapeHtml(tunnel.host) + '</code>',
+    `🗑️ <b>Custom Hostname:</b> ${chStatusText}`,
+    `☁️ <b>DNS Record A:</b> ${dnsStatusText}</blockquote>`,
+    '',
+    '<i>Konfigurasi wildcard telah dibersihkan dari sistem bot dan Cloudflare.</i>'
+  ].join('\n');
+
+  const kb = Markup.inlineKeyboard([
+    [Markup.button.callback('⚡ Setting Wildcard', `dom_tunnels:${tunnel.zone_id}`)],
+    [Markup.button.callback('🗑️ Hapus Wildcard Lain', `dom_del_tunnel:${tunnel.zone_id}`)],
+    [Markup.button.callback('↩️ Menu Domain', `select_zone:${tunnel.zone_id}`)]
+  ]);
+
+  return utils.safeEdit(ctx, text, { parse_mode: 'HTML', ...kb });
+}
+
+async function deleteTunnelAction(ctx, tunnelId, withDns = false) {
+  return confirmDeleteTunnel(ctx, tunnelId);
 }
 
 module.exports = {
   showTunnels,
+  showDeleteTunnelList,
+  confirmDeleteTunnel,
+  executeDeleteTunnel,
+  syncTunnelsWithCloudflare,
   startNewTunnel,
   handleTunnelHostInput,
   handleTunnelIpInput,

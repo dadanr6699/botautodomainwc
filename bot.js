@@ -151,6 +151,18 @@ bot.command('tunnels', async (ctx) => {
   return tunnel.showTunnels(ctx, user.selected_zone_id);
 });
 
+bot.command(['deltunnel', 'delwildcard', 'hapuswildcard'], async (ctx) => {
+  const user = db.getUser(ctx.from.id);
+  if (!user.cf_email || !user.cf_api_key) return common.renderHome(ctx);
+  if (!user.selected_zone_id) {
+    return ctx.reply('⚠️ <i>Pilih domain terlebih dahulu:</i>', {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard([[Markup.button.callback('🌐 Pilih Domain Cloudflare', 'menu_zones')]])
+    });
+  }
+  return tunnel.showDeleteTunnelList(ctx, user.selected_zone_id);
+});
+
 bot.command('ip', async (ctx) => {
   return common.showVpsIp(ctx);
 });
@@ -168,6 +180,7 @@ bot.command('help', async (ctx) => {
     '• /domains — Pilih domain / zone aktif',
     '• /records — Lihat daftar DNS A records',
     '• /tunnels — Kelola Setting Wildcard & SSL',
+    '• /deltunnel — Hapus domain wildcard',
     '• /ip — Cek IP publik VPS (Herza)',
     '• /tutorial — Panduan ambil Global API Key',
     '• /logout — Hapus data Cloudflare dari bot',
@@ -338,6 +351,11 @@ bot.action(/^dom_tunnels:(.+)$/, async (ctx) => {
   return tunnel.showTunnels(ctx, ctx.match[1]);
 });
 
+bot.action(/^dom_del_tunnel:(.+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  return tunnel.showDeleteTunnelList(ctx, ctx.match[1]);
+});
+
 bot.action(/^tunnel_new:(.+)$/, async (ctx) => {
   await ctx.answerCbQuery();
   return tunnel.startNewTunnel(ctx, ctx.match[1]);
@@ -356,12 +374,27 @@ bot.action(/^tunnel_view:(\d+)$/, async (ctx) => {
   return tunnel.showTunnelDetail(ctx, parseInt(ctx.match[1], 10));
 });
 
+bot.action(/^tunnel_confirm_del:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  return tunnel.confirmDeleteTunnel(ctx, parseInt(ctx.match[1], 10));
+});
+
+bot.action(/^tunnel_dodel_ch:(\d+)$/, async (ctx) => {
+  return tunnel.executeDeleteTunnel(ctx, parseInt(ctx.match[1], 10), false);
+});
+
+bot.action(/^tunnel_dodel_both:(\d+)$/, async (ctx) => {
+  return tunnel.executeDeleteTunnel(ctx, parseInt(ctx.match[1], 10), true);
+});
+
 bot.action(/^tunnel_del_ch:(\d+)$/, async (ctx) => {
-  return tunnel.deleteTunnelAction(ctx, parseInt(ctx.match[1], 10), false);
+  await ctx.answerCbQuery();
+  return tunnel.confirmDeleteTunnel(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.action(/^tunnel_del_both:(\d+)$/, async (ctx) => {
-  return tunnel.deleteTunnelAction(ctx, parseInt(ctx.match[1], 10), true);
+  await ctx.answerCbQuery();
+  return tunnel.confirmDeleteTunnel(ctx, parseInt(ctx.match[1], 10));
 });
 
 bot.action(/^use_vps_ip:(.+)$/, async (ctx) => {

@@ -19,6 +19,9 @@ function homeMenuKeyboard(selectedZone = null) {
     ]);
     rows.push([
       Markup.button.callback('⚡ Setting Wildcard', `dom_tunnels:${selectedZone.id}`),
+      Markup.button.callback('🗑️ Hapus Wildcard', `dom_del_tunnel:${selectedZone.id}`)
+    ]);
+    rows.push([
       Markup.button.callback('🌐 Ganti Domain', 'menu_zones')
     ]);
   } else {
@@ -66,9 +69,10 @@ function zoneDetailKeyboard(zoneId) {
     ],
     [
       Markup.button.callback('⚡ Setting Wildcard', `dom_tunnels:${zoneId}`),
-      Markup.button.callback('🌐 Pilih Domain Lain', 'menu_zones')
+      Markup.button.callback('🗑️ Hapus Wildcard', `dom_del_tunnel:${zoneId}`)
     ],
     [
+      Markup.button.callback('🌐 Pilih Domain Lain', 'menu_zones'),
       Markup.button.callback('↩️ Dashboard Utama', 'menu_home')
     ]
   ]);

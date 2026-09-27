@@ -228,6 +228,14 @@ async function provisionTunnel(auth, zoneId, host, ip, onProgress = null) {
   };
 }
 
+async function getCustomHostnames(auth, zoneId) {
+  const res = await cfRequest(auth, 'GET', '/custom_hostnames?per_page=50', null, zoneId);
+  if (res.success && Array.isArray(res.result)) {
+    return { success: true, hostnames: res.result };
+  }
+  return { success: false, error: getErrorMessage(res, 'Gagal mengambil daftar Custom Hostname') };
+}
+
 async function getCustomHostnameStatus(auth, zoneId, chId) {
   const res = await cfRequest(auth, 'GET', `/custom_hostnames/${chId}`, null, zoneId);
   if (res.success && res.result) {
@@ -245,10 +253,28 @@ async function getCustomHostnameStatus(auth, zoneId, chId) {
 async function deleteTunnelFull(auth, zoneId, chId, host, withDns = true) {
   let chDeleted = false;
   let dnsDeleted = false;
+  let error = null;
 
   if (chId) {
     const delCh = await cfRequest(auth, 'DELETE', `/custom_hostnames/${chId}`, null, zoneId);
     chDeleted = delCh.success;
+    if (!delCh.success && delCh.errors) {
+      error = getErrorMessage(delCh, 'Gagal menghapus Custom Hostname');
+    }
+  }
+
+  // If chId was missing or delete failed, search by hostname in Cloudflare
+  if (!chDeleted && host) {
+    const encodedHost = encodeURIComponent(host.toLowerCase().trim());
+    const chFind = await cfRequest(auth, 'GET', `/custom_hostnames?hostname=${encodedHost}`, null, zoneId);
+    if (chFind.success && Array.isArray(chFind.result) && chFind.result.length > 0) {
+      const realId = chFind.result[0].id;
+      const delCh = await cfRequest(auth, 'DELETE', `/custom_hostnames/${realId}`, null, zoneId);
+      chDeleted = delCh.success;
+      if (!delCh.success && delCh.errors) {
+        error = getErrorMessage(delCh, 'Gagal menghapus Custom Hostname');
+      }
+    }
   }
 
   if (withDns && host) {
@@ -257,9 +283,13 @@ async function deleteTunnelFull(auth, zoneId, chId, host, withDns = true) {
       const delRec = await deleteRecord(auth, zoneId, findRes.record.id);
       dnsDeleted = delRec.success;
     }
+    const findTxt = await findRecord(auth, zoneId, `_cf-custom-hostname.${host}`, 'TXT');
+    if (findTxt.success && findTxt.record) {
+      await deleteRecord(auth, zoneId, findTxt.record.id);
+    }
   }
 
-  return { success: chDeleted, chDeleted, dnsDeleted };
+  return { success: chDeleted, chDeleted, dnsDeleted, error };
 }
 
 module.exports = {
@@ -273,6 +303,7 @@ module.exports = {
   updateRecord,
   deleteRecord,
   provisionTunnel,
+  getCustomHostnames,
   getCustomHostnameStatus,
   deleteTunnelFull
 };
