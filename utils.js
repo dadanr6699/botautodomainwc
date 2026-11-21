@@ -72,7 +72,7 @@ async function getPublicIP() {
       }
     } catch (e) {}
   }
-  return '104.207.93.66'; // Fallback to current VPS IP
+  return '38.47.191.227'; // Fallback to current VPS IP
 }
 
 function escapeHtml(str) {
